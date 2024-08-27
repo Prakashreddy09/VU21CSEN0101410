@@ -76,6 +76,21 @@ app.get('/categories/:categoryname/products', async (req, res) => {
 });
 
 
+app.get('/categories/:categoryname/products/:productid', async (req, res) => {
+    const { categoryname, productid } = req.params;
+
+    const products = await fetchProducts(categoryname, 100, 0, Number.MAX_SAFE_INTEGER);
+
+    const product = products.find(prod => prod.id === productid);
+
+    if (product) {
+        res.json(product);
+    } else {
+        res.status(404).json({ error: 'Product not found' });
+    }
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
