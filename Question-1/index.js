@@ -6,11 +6,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const cache = new Map();
+const cacheStore = new Map();
 
 const NAMESPACE = process.env.NAMESPACE ||                'e6b56f02-4a3d-4c26-82d4-d945aeb7c007';
 
-const CACHE_TTL = 300000;
+const CACHE_DURATION = 300000;
 
 
 const dummyProducts = [
@@ -30,6 +30,50 @@ const dummyProducts = [
     { productName: "Phone N", price: 190, rating: 4.2, discount: 25, availability: "yes" },
     { productName: "Phone O", price: 280, rating: 4.6, discount: 12, availability: "yes" },
 ];
+
+
+async function fetchProducts(category, limit, minCost, maxCost) {
+    const filteredItems = dummyProducts.filter(item =>
+        item.price >= minCost && item.price <= maxCost
+    );
+
+    filteredItems.forEach(item => {
+        item.id = uuidv5(item.productName + item.price + item.rating, NAMESPACE);
+    });
+
+    return filteredItems;
+}
+
+app.get('/categories/:categoryname/products', async (req, res) => {
+    const { categoryname } = req.params;
+    const { n = 10, page = 1, minPrice = 0, maxPrice = Number.MAX_SAFE_INTEGER, sort_by = 'price', order = 'asc' } = req.query;
+
+    const currentPage = parseInt(page, 10);
+    const itemsPerPage = parseInt(n, 10);
+
+    const cacheKey = `${categoryname}-${sort_by}-${order}-${currentPage}-${itemsPerPage}-${minPrice}-${maxPrice}`;
+    if (cacheStore.has(cacheKey) && (Date.now() - cacheStore.get(cacheKey).timestamp < CACHE_DURATION)) {
+        return res.json(cacheStore.get(cacheKey).data);
+    }
+
+    let products = await fetchProducts(categoryname, itemsPerPage, minPrice, maxPrice);
+
+    products.sort((a, b) => {
+        if (order === 'asc') {
+            return a[sort_by] - b[sort_by];
+        } else {
+            return b[sort_by] - a[sort_by];
+        }
+    });
+
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const paginatedProducts = products.slice(start, end);
+
+    cacheStore.set(cacheKey, { data: paginatedProducts, timestamp: Date.now() });
+
+    res.json(paginatedProducts);
+});
 
 
 const PORT = process.env.PORT || 3000;
